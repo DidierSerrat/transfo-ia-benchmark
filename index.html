@@ -325,6 +325,7 @@ function initChat() {
   history = []; msgCount = 0;
   document.getElementById("msgs").innerHTML = "";
   setProgress(0);
+  history.push({role:"user", content:"Bonjour, je souhaite participer au benchmark."});
   sendMsg(null);
   setTimeout(() => document.getElementById("ci").focus(), 300);
 }
