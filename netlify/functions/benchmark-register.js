@@ -49,9 +49,9 @@ exports.handler = async function(event) {
     const existing = await check.json();
     if (existing && existing.length > 0) {
       return {
-        statusCode: 409,
+        statusCode: 200,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ error: "Vous avez déjà participé au benchmark. Merci pour votre contribution !" })
+        body: JSON.stringify({ authorized: true, isUpdate: true, firstName, lastName, company, email })
       };
     }
   } catch(e) { /* on laisse passer si erreur réseau */ }

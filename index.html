@@ -103,7 +103,16 @@ input:focus{border-color:var(--z);box-shadow:0 0 0 3px rgba(18,133,163,.1)}
     <label style="font-size:12px;color:var(--mu);margin-bottom:4px;display:block">Email professionnel</label>
     <input type="email" id="bk-em" placeholder="prenom.nom@entreprise.com" />
     <div id="bk-err" class="err"></div>
-    <button class="btn btnp" style="width:100%;margin-top:14px" onclick="doRegister()">Commencer →</button>
+    <div id="bk-update-msg" style="display:none;background:#FFF8E1;border:1px solid #FFD54F;border-radius:var(--rs);padding:.875rem 1rem;margin-top:10px;font-size:13px;line-height:1.6;color:var(--tx)">
+      Vous avez déjà participé au benchmark avec cette adresse.<br>
+      <strong>Souhaitez-vous mettre à jour vos réponses ?</strong><br>
+      Vos précédentes réponses seront remplacées.
+      <div style="display:flex;gap:8px;margin-top:10px">
+        <button class="btn" style="flex:1;font-size:13px;color:#E24B4A;border-color:rgba(226,75,74,.3)" onclick="cancelUpdate()">Non, annuler</button>
+        <button class="btn btnp" style="flex:1;font-size:13px" onclick="confirmUpdate()">Oui, modifier →</button>
+      </div>
+    </div>
+    <button class="btn btnp" style="width:100%;margin-top:14px" id="bk-submit-btn" onclick="doRegister()">Commencer →</button>
     <p style="font-size:11px;color:var(--mu);text-align:center;margin-top:10px;line-height:1.5">Adresse professionnelle requise (pas de Gmail, Hotmail…)<br>Vos données restent confidentielles.</p>
   </div>
 </div>
@@ -127,7 +136,7 @@ input:focus{border-color:var(--z);box-shadow:0 0 0 3px rgba(18,133,163,.1)}
       <div class="rgpd-section">
         <strong>Qui traite vos données et comment ?</strong><br>
         — <b>Claude (Anthropic, USA)</b> : les échanges transitent par l'API Anthropic pour générer les questions et la synthèse. Anthropic s'engage contractuellement à ne pas utiliser ces données pour entraîner ses modèles (DPA disponible).<br><br>
-        — <b>Supabase (OVH Cloud, Gravelines, UE)</b> : vos réponses sont stockées en France — datacenter de Gravelines, dans l'Union Européenne.<br><br>
+        — <b>Supabase (AWS Paris, UE)</b> : vos réponses structurées et votre synthèse sont stockées dans une base de données hébergée en France — région Paris (eu-west-3), dans l'Union Européenne.<br><br>
         — <b>Zeebra</b> : utilise les données pour produire des analyses sectorielles anonymisées et publiées.
       </div>
       <div class="rgpd-section">
@@ -307,15 +316,18 @@ function show(id) {
 // ── REGISTER ──
 document.getElementById("bk-em").addEventListener("keydown", e => { if(e.key==="Enter") doRegister(); });
 
+let isUpdateMode = false;
+
 async function doRegister() {
   const fn  = document.getElementById("bk-fn").value.trim();
   const ln  = document.getElementById("bk-ln").value.trim();
   const co  = document.getElementById("bk-co").value.trim();
   const em  = document.getElementById("bk-em").value.trim().toLowerCase();
   const err = document.getElementById("bk-err");
-  const btn = document.querySelector("#s-reg .btnp");
+  const btn = document.getElementById("bk-submit-btn");
   if (!em) { err.style.display="block"; err.textContent="Email requis."; return; }
   err.style.display="none";
+  document.getElementById("bk-update-msg").style.display="none";
   btn.disabled=true; btn.textContent="Vérification…";
   try {
     const res = await fetch("/.netlify/functions/benchmark-register", {
@@ -323,18 +335,45 @@ async function doRegister() {
       body: JSON.stringify({email:em, firstName:fn, lastName:ln, company:co})
     });
     const data = await res.json();
+    if (res.status === 409 || data.isUpdate) {
+      // Doublon : proposer la mise à jour
+      btn.disabled=false; btn.textContent="Commencer →";
+      btn.style.display="none";
+      document.getElementById("bk-update-msg").style.display="block";
+      userEmail=em; userFirstName=fn; userLastName=ln; userCompany=co;
+      return;
+    }
     if (!res.ok || !data.authorized) {
       err.style.display="block"; err.textContent=data.error||"Erreur.";
       btn.disabled=false; btn.textContent="Commencer →"; return;
     }
-    userEmail=em; userFirstName=fn; userLastName=ln; userCompany=co;
-    document.getElementById("ulabel").textContent = (fn||em) + (co ? " · "+co : "");
-    btn.disabled=false; btn.textContent="Commencer →";
-    show("s-rgpd");
+    isUpdateMode=false;
+    proceedToRGPD(fn, co, em);
   } catch(e) {
     err.style.display="block"; err.textContent="Erreur de connexion.";
     btn.disabled=false; btn.textContent="Commencer →";
   }
+}
+
+function cancelUpdate() {
+  document.getElementById("bk-update-msg").style.display="none";
+  document.getElementById("bk-submit-btn").style.display="block";
+  userEmail="";
+}
+
+function confirmUpdate() {
+  isUpdateMode=true;
+  const fn=document.getElementById("bk-fn").value.trim();
+  const co=document.getElementById("bk-co").value.trim();
+  proceedToRGPD(fn, co, userEmail);
+}
+
+function proceedToRGPD(fn, co, em) {
+  document.getElementById("ulabel").textContent = (fn||em) + (co ? " · "+co : "");
+  document.getElementById("bk-submit-btn").style.display="block";
+  document.getElementById("bk-submit-btn").disabled=false;
+  document.getElementById("bk-submit-btn").textContent="Commencer →";
+  show("s-rgpd");
 }
 
 // ── RGPD ──
@@ -506,7 +545,12 @@ async function sendMsg(_) {
   company: userCompany, datetime: now.toLocaleString("fr-FR")
 };
 let saveOk = false;
-    try { await sbRequest("POST","benchmark_repondants",record); saveOk=true; } catch(e){ console.error(e); }
+    try {
+      if (isUpdateMode) {
+        await sbRequest("DELETE","benchmark_repondants?email=eq."+encodeURIComponent(userEmail));
+      }
+      await sbRequest("POST","benchmark_repondants",record); saveOk=true;
+    } catch(e){ console.error(e); }
 
     document.getElementById("sc").textContent = display;
     document.getElementById("synthdate").textContent =
@@ -553,7 +597,7 @@ async function sbRequest(method, path, body) {
     },
     body: body ? JSON.stringify(body) : undefined
   });
-  if (!res.ok) { const e=await res.json().catch(()=>({})); throw new Error(JSON.stringify(e)); }
+  if (!res.ok && res.status !== 204) { const e=await res.json().catch(()=>({})); throw new Error(JSON.stringify(e)); }
   return res.json().catch(()=>({}));
 }
 
