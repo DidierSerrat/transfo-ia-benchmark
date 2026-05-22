@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Benchmark IA & Transformation — Zeebra</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <style>
 :root{--z:#1285A3;--zd:#0D6880;--zl:#E8F5F9;--bg:#F7F6FF;--card:#FFFFFF;--tx:#1A1A2E;--mu:#6B6B8A;--bd:rgba(18,133,163,0.15);--ok:#1D9E75;--r:14px;--rs:8px}
 *{box-sizing:border-box;margin:0;padding:0}
@@ -186,6 +187,7 @@ input:focus{border-color:var(--z);box-shadow:0 0 0 3px rgba(18,133,163,.1)}
   </div>
   <div class="synth-body"><pre id="sc"></pre></div>
   <div class="synth-foot">
+    <button class="btn btnp" style="width:100%;margin-bottom:10px" onclick="downloadPDF()">Télécharger ma synthèse en PDF →</button>
     <div class="save-note" id="save-status"></div>
   </div>
 </div>
@@ -231,7 +233,15 @@ Puis : classer les 3 premières par ordre de priorité.
 
 4. Ce qui fonctionne dans l'appropriation IA : pratiques, dispositifs ou conditions qui ont produit des résultats (phrase libre)
 
-5. Maturité transformation : facilité à conduire des transformations 1-5 / style d'accompagnement qui fonctionne dans votre entreprise
+5. Maturité transformation : facilité à conduire des transformations 1-5 / styles d'accompagnement qui fonctionnent dans votre entreprise — sélectionner jusqu'à 3 parmi :
+1. Co-construction avec les équipes
+2. Formation en salle
+3. Accompagnement en situation de travail
+4. Coaching individuel des managers
+5. Communautés de pratiques
+6. Communication top-down
+7. Expérimentation / pilotes terrain
+8. Mentorat par les pairs
 
 6. Difficultés principales dans la conduite de la transformation — sélectionner jusqu'à 4 parmi :
 1. Surcharge et manque de temps des équipes
@@ -245,7 +255,15 @@ Puis : classer les 3 premières par ordre de priorité.
 9. Turnover et instabilité des équipes
 10. Manque de suivi et pilotage de l'adoption
 
-7. Management intermédiaire : légitimité et aisance sur l'IA pour entraîner leurs équipes 1-5 / ont-ils joué un rôle d'entraînement actif sur des transformations récentes — si oui qu'est-ce qui a fonctionné, si non quel est le principal frein
+7. Management intermédiaire et de proximité :
+   - Légitimité et aisance des managers intermédiaires sur l'IA pour porter le sujet en cascade 1-5
+   - Capacité des managers de proximité à entraîner leurs équipes au quotidien 1-5
+   - Ont-ils joué un rôle d'entraînement actif sur des transformations récentes — si oui qu'est-ce qui a fonctionné, si non quel est le principal frein parmi :
+     1. Manque de temps
+     2. Manque de compétences IA
+     3. Absence de cadre ou de méthode
+     4. Pas d'injonction hiérarchique claire
+     5. Résistance personnelle au changement
 
 8. Ce qui manque le plus aujourd'hui pour accélérer l'adoption de l'IA dans votre entreprise (phrase libre)
 
@@ -266,7 +284,7 @@ PRINCIPALES DIFFICULTÉS IA (CLASSÉES)
 PRINCIPALES DIFFICULTÉS TRANSFORMATION
 [texte]
 
-ENGAGEMENT DU MANAGEMENT INTERMÉDIAIRE
+MANAGEMENT INTERMÉDIAIRE ET DE PROXIMITÉ
 [texte]
 
 CE QUI FONCTIONNE
@@ -483,7 +501,11 @@ async function sendMsg(_) {
       open_comment: jd.open_comment||"", summary: display
     };
 
-    let saveOk = false;
+    window._synthData = {
+  display, firstName: userFirstName, lastName: userLastName,
+  company: userCompany, datetime: now.toLocaleString("fr-FR")
+};
+let saveOk = false;
     try { await sbRequest("POST","benchmark_repondants",record); saveOk=true; } catch(e){ console.error(e); }
 
     document.getElementById("sc").textContent = display;
@@ -491,8 +513,8 @@ async function sendMsg(_) {
       now.toLocaleDateString("fr-FR",{weekday:"long",year:"numeric",month:"long",day:"numeric"}) +
       " à " + now.toLocaleTimeString("fr-FR",{hour:"2-digit",minute:"2-digit"});
     document.getElementById("save-status").textContent = saveOk
-      ? "✓ Vos réponses ont été enregistrées de façon sécurisée (Supabase · Paris)."
-      : "⚠ Enregistrement impossible — notez votre synthèse avant de fermer.";
+      ? "✓ Vos réponses ont été enregistrées de façon sécurisée."
+      : "⚠ Enregistrement impossible — téléchargez votre synthèse en PDF.";
     setProgress(18);
     setTimeout(() => show("s-synth"), 500);
     return;
@@ -533,6 +555,38 @@ async function sbRequest(method, path, body) {
   });
   if (!res.ok) { const e=await res.json().catch(()=>({})); throw new Error(JSON.stringify(e)); }
   return res.json().catch(()=>({}));
+}
+
+function downloadPDF() {
+  const d = window._synthData;
+  if (!d) return;
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({unit:"mm",format:"a4"});
+  const W=210, ml=18, mr=18, cw=W-ml-mr;
+  let y=20;
+  // En-tête
+  doc.setFontSize(10); doc.setTextColor(107,107,138);
+  doc.text("Zeebra — Benchmark IA & Transformation 2026",ml,y); y+=7;
+  doc.setFontSize(13); doc.setTextColor(26,26,46); doc.setFont("helvetica","bold");
+  doc.text((d.firstName||"")+" "+(d.lastName||""),ml,y); y+=5;
+  doc.setFont("helvetica","normal"); doc.setFontSize(10); doc.setTextColor(107,107,138);
+  if (d.company) { doc.text(d.company,ml,y); y+=5; }
+  doc.text(d.datetime,ml,y); y+=8;
+  doc.setDrawColor(18,133,163); doc.line(ml,y,W-mr,y); y+=8;
+  // Corps
+  doc.setFont("helvetica","normal"); doc.setFontSize(11); doc.setTextColor(26,26,46);
+  for (const line of d.display.split("\n")) {
+    if (y>270){doc.addPage();y=20;}
+    const isT = line.trim()&&line.trim().length<80&&/^[A-ZÉÈÊÀÙÔÎÏÂ]/.test(line.trim())&&line.trim()===line.trim().toUpperCase();
+    if (isT){y+=3;doc.setFont("helvetica","bold");doc.setFontSize(12);doc.setTextColor(18,133,163);doc.text(line.trim(),ml,y);y+=6;doc.setFont("helvetica","normal");doc.setFontSize(11);doc.setTextColor(26,26,46);}
+    else if(line.trim()){for(const wl of doc.splitTextToSize(line,cw)){if(y>270){doc.addPage();y=20;}doc.text(wl,ml,y);y+=5.5;}}
+    else{y+=3;}
+  }
+  // Pied de page
+  const pages=doc.internal.getNumberOfPages();
+  for(let i=1;i<=pages;i++){doc.setPage(i);doc.setFontSize(9);doc.setTextColor(180,180,200);doc.text("Zeebra — Benchmark IA & Transformation",ml,287);doc.text("Page "+i+"/"+pages,W-mr,287,{align:"right"});}
+  const fname = "Zeebra_Benchmark_"+((d.firstName||"")+"_"+(d.lastName||"")).replace(/[^a-zA-Z0-9]/g,"_")+"_"+new Date().toISOString().slice(0,10)+".pdf";
+  doc.save(fname);
 }
 </script>
 </body>
